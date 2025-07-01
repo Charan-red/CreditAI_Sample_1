@@ -217,32 +217,43 @@ class TeslaFinancialReportGenerator:
             ("Current Liabilities", "Current Liabilities"),
             ("Long-Term Debt", "Long Term Debt"),
             ("Total Liabilities", "Total Liabilities Net Minority Interest"),
-            ("Net Worth (OE)", "Total Stockholder Equity"),
+            ("Net Worth (OE)", None),  # Calculated field
         ]
 
         for item_name, field_name in liability_items:
             ws[f'C{row}'] = item_name
 
-            if field_name:
+            if field_name and field_name != "Net Worth (OE)":
                 # Add quarterly data
                 self._add_quarterly_data(ws, row, self.quarterly_balance_sheet, field_name, 'E', 'F', 'G', 'H', 'I', 'J')
 
                 # Add annual data
                 self._add_annual_data(ws, row, self.annual_balance_sheet, field_name, 'K', 'L', 'M', 'N', 'O')
+            elif item_name == "Net Worth (OE)":
+                # NetWorth = Total Assets - total Liabilities
+                self._calculate_networth(ws, row)
+
 
             row += 1
 
         # Add financial ratios
-        row += 1
+        row += 2
+        ws[f'B{row}'] = ":"
+        ws[f'B{row}'].font = Font(bold=True)
 
         # Current Ratio
-        ws[f'A{row}'] = "Current Ratio"
+        ws[f'C{row}'] = "Current Ratio"
         self._calculate_current_ratio(ws, row)
         row += 1
 
         # Quick Ratio
-        ws[f'A{row}'] = "Quick Ratio"
+        ws[f'C{row}'] = "Quick Ratio"
         self._calculate_quick_ratio(ws, row)
+        row += 1
+
+        # Debt to Equity Ratio
+        ws[f'C{row}'] = "Debt to Equity Ratio"
+        self._calculate_Debt_to_Equity(ws, row)
 
         return row
 
@@ -440,8 +451,8 @@ class TeslaFinancialReportGenerator:
         # For now, we'll use the data directly
         if self.quarterly_balance_sheet is not None:
             try:
-                current_assets = self.quarterly_balance_sheet.loc['Total Current Assets'].values[:3]
-                current_liabilities = self.quarterly_balance_sheet.loc['Total Current Liabilities'].values[:3]
+                current_assets = self.quarterly_balance_sheet.loc['Current Assets'].values[:3]
+                current_liabilities = self.quarterly_balance_sheet.loc['Current Liabilities'].values[:3]
 
                 for i, (ca, cl) in enumerate(zip(current_assets, current_liabilities)):
                     working_capital = ca - cl
@@ -462,8 +473,8 @@ class TeslaFinancialReportGenerator:
         # Similar calculation for annual data
         if self.annual_balance_sheet is not None:
             try:
-                current_assets = self.annual_balance_sheet.loc['Total Current Assets'].values[:3]
-                current_liabilities = self.annual_balance_sheet.loc['Total Current Liabilities'].values[:3]
+                current_assets = self.annual_balance_sheet.loc['Current Assets'].values[:3]
+                current_liabilities = self.annual_balance_sheet.loc['Current Liabilities'].values[:3]
 
                 for i, (ca, cl) in enumerate(zip(current_assets, current_liabilities)):
                     working_capital = ca - cl
@@ -480,13 +491,60 @@ class TeslaFinancialReportGenerator:
 
             except Exception as e:
                 logger.warning(f"Error calculating annual working capital: {e}")
+    def _calculate_networth(self, ws, row):
+        """Calculate networth = Total Assets - Total Liabilities"""
+        # This would need to reference the cells with current assets and liabilities
+        # For now, we'll use the data directly
+        if self.quarterly_balance_sheet is not None:
+            try:
+                total_assets = self.quarterly_balance_sheet.loc['Total Assets'].values[:3]
+                total_liabilities = self.quarterly_balance_sheet.loc['Total Liabilities Net Minority Interest'].values[:3]
+
+                for i, (ta, tl) in enumerate(zip(total_assets, total_liabilities)):
+                    networth = ta - tl
+                    col = ['E', 'G', 'I'][i]
+                    ws[f'{col}{row}'] = self._format_currency(networth)
+
+                    # Add percentage changes
+                    if i > 0:
+                        prev_nw = total_assets[i-1] - total_liabilities[i-1]
+                        pct_change = self._calculate_pct_change(networth, prev_nw)
+                        pct_col = ['F', 'H'][i-1]
+                        ws[f'{pct_col}{row}'] = pct_change
+                        ws[f'{pct_col}{row}'].number_format = '0.00%' if abs(pct_change) < 10 else '0.0'
+
+            except Exception as e:
+                logger.warning(f"Error calculating Networth: {e}")
+
+        # Similar calculation for annual data
+        if self.annual_balance_sheet is not None:
+            try:
+                total_assets = self.annual_balance_sheet.loc['Total Assets'].values[:3]
+                total_liabilities = self.annual_balance_sheet.loc['Total Liabilities Net Minority Interest'].values[:3]
+
+                for i, (ta, tl) in enumerate(zip(total_assets, total_liabilities)):
+                    networth = ta - tl
+                    col = ['K', 'M', 'O'][i]
+                    ws[f'{col}{row}'] = self._format_currency(networth)
+
+                    # Add percentage changes
+                    if i > 0:
+                        prev_nw = total_assets[i-1] - total_liabilities[i-1]
+                        pct_change = self._calculate_pct_change(networth, prev_nw)
+                        pct_col = ['L', 'N'][i-1]
+                        ws[f'{pct_col}{row}'] = pct_change
+                        ws[f'{pct_col}{row}'].number_format = '0.00%' if abs(pct_change) < 10 else '0.0'
+
+            except Exception as e:
+                logger.warning(f"Error calculating annual networth: {e}")
+
 
     def _calculate_current_ratio(self, ws, row):
         """Calculate Current Ratio = Current Assets / Current Liabilities"""
         if self.quarterly_balance_sheet is not None:
             try:
-                current_assets = self.quarterly_balance_sheet.loc['Total Current Assets'].values[:3]
-                current_liabilities = self.quarterly_balance_sheet.loc['Total Current Liabilities'].values[:3]
+                current_assets = self.quarterly_balance_sheet.loc['Current Assets'].values[:3]
+                current_liabilities = self.quarterly_balance_sheet.loc['Current Liabilities'].values[:3]
 
                 for i, (ca, cl) in enumerate(zip(current_assets, current_liabilities)):
                     if cl != 0:
@@ -500,8 +558,8 @@ class TeslaFinancialReportGenerator:
         # Annual data
         if self.annual_balance_sheet is not None:
             try:
-                current_assets = self.annual_balance_sheet.loc['Total Current Assets'].values[:3]
-                current_liabilities = self.annual_balance_sheet.loc['Total Current Liabilities'].values[:3]
+                current_assets = self.annual_balance_sheet.loc['Current Assets'].values[:3]
+                current_liabilities = self.annual_balance_sheet.loc['Current Liabilities'].values[:3]
 
                 for i, (ca, cl) in enumerate(zip(current_assets, current_liabilities)):
                     if cl != 0:
@@ -516,9 +574,9 @@ class TeslaFinancialReportGenerator:
         """Calculate Quick Ratio = (Current Assets - Inventory) / Current Liabilities"""
         if self.quarterly_balance_sheet is not None:
             try:
-                current_assets = self.quarterly_balance_sheet.loc['Total Current Assets'].values[:3]
+                current_assets = self.quarterly_balance_sheet.loc['Current Assets'].values[:3]
                 inventory = self.quarterly_balance_sheet.loc['Inventory'].values[:3] if 'Inventory' in self.quarterly_balance_sheet.index else [0, 0, 0]
-                current_liabilities = self.quarterly_balance_sheet.loc['Total Current Liabilities'].values[:3]
+                current_liabilities = self.quarterly_balance_sheet.loc['Current Liabilities'].values[:3]
 
                 for i, (ca, inv, cl) in enumerate(zip(current_assets, inventory, current_liabilities)):
                     if cl != 0:
@@ -532,9 +590,9 @@ class TeslaFinancialReportGenerator:
         # Annual data
         if self.annual_balance_sheet is not None:
             try:
-                current_assets = self.annual_balance_sheet.loc['Total Current Assets'].values[:3]
+                current_assets = self.annual_balance_sheet.loc['Current Assets'].values[:3]
                 inventory = self.annual_balance_sheet.loc['Inventory'].values[:3] if 'Inventory' in self.annual_balance_sheet.index else [0, 0, 0]
-                current_liabilities = self.annual_balance_sheet.loc['Total Current Liabilities'].values[:3]
+                current_liabilities = self.annual_balance_sheet.loc['Current Liabilities'].values[:3]
 
                 for i, (ca, inv, cl) in enumerate(zip(current_assets, inventory, current_liabilities)):
                     if cl != 0:
@@ -544,6 +602,40 @@ class TeslaFinancialReportGenerator:
 
             except Exception as e:
                 logger.warning(f"Error calculating annual quick ratio: {e}")
+
+    def _calculate_Debt_to_Equity(self, ws, row):
+        """Calculate debt to equity = Total Liabilities - NetWorth (OE)"""
+        if self.quarterly_balance_sheet is not None:
+            try:
+                total_assets = self.quarterly_balance_sheet.loc['Total Assets'].values[:3]
+                total_liabilities = self.quarterly_balance_sheet.loc['Total Liabilities Net Minority Interest'].values[:3]
+                
+
+                for i, (ta, tl) in enumerate(zip(total_assets, total_liabilities)):
+                    networth = ta - tl
+                    if networth != 0:
+                        debt_to_equity = tl / networth
+                        col = ['E', 'G', 'I'][i]
+                        ws[f'{col}{row}'] = round(debt_to_equity, 2)
+                    
+            except Exception as e:
+                logger.warning(f"Error calculating debt to equity: {e}")
+
+        # Annual data
+        if self.annual_balance_sheet is not None:
+            try:
+                total_assets = self.annual_balance_sheet.loc['Total Assets'].values[:3]
+                total_liabilities = self.annual_balance_sheet.loc['Total Liabilities Net Minority Interest'].values[:3] 
+
+                for i, (ta, tl) in enumerate(zip(total_assets, total_liabilities)):
+                    networth = ta - tl
+                    if networth != 0:
+                        debt_to_equity = tl / networth
+                        col = ['K', 'M', 'O'][i]
+                        ws[f'{col}{row}'] = round(debt_to_equity, 2)
+
+            except Exception as e:
+                logger.warning(f"Error calculating annual debt to equity : {e}")
 
     def _calculate_gross_margin(self, ws, row):
         """Calculate Gross Margin = Gross Profit / Revenue"""
