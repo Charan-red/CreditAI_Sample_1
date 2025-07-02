@@ -174,9 +174,9 @@ class TeslaFinancialReportGenerator:
         ws['C58'] = 1000
 
         # Quarterly headers for Cash flow
-        ws['E59'] = "Q"
-        ws['G59'] = "Q"
-        ws['I59'] = "Q"
+        ws['E57'] = "Q"
+        ws['G57'] = "Q"
+        ws['I57'] = "Q"
 
         # Cash Flow headers
         row = 57
@@ -213,15 +213,15 @@ class TeslaFinancialReportGenerator:
         ws.column_dimensions['C'].width = 30
         ws.column_dimensions['D'].width = 2
         ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 8
+        ws.column_dimensions['F'].width = 10
         ws.column_dimensions['G'].width = 15
-        ws.column_dimensions['H'].width = 8
+        ws.column_dimensions['H'].width = 10
         ws.column_dimensions['I'].width = 15
-        ws.column_dimensions['J'].width = 8
+        ws.column_dimensions['J'].width = 10
         ws.column_dimensions['K'].width = 15
-        ws.column_dimensions['L'].width = 8
+        ws.column_dimensions['L'].width = 10
         ws.column_dimensions['M'].width = 15
-        ws.column_dimensions['N'].width = 8
+        ws.column_dimensions['N'].width = 10
         ws.column_dimensions['O'].width = 15
 
         # Save the workbook
@@ -323,34 +323,40 @@ class TeslaFinancialReportGenerator:
             ("Total Revenue", "Total Revenue"),
             ("Cost of Revenue", "Cost Of Revenue"),
             ("Gross Profit", "Gross Profit"),
-            ("%Profit_Margin",None), #Calculate Margin
+            ("Gross_Profit_Margin",None), #Calculate Margin
             ("Research And Development", "Research And Development"),
             ("Selling General And Administration", "Selling General And Administration"),
             ("Non-Recurring Items","Non-Recurring Items"),
             ("Other Operating Items", "Other Operating Items"),
             ("Operating Expenses", None), #Calculate operation expenses
             ("EBIT", "EBIT"),
-            ("%EBIT_Margin", None), #Calculate EBIT Margin
+            ("EBIT_Margin", None), #Calculate EBIT Margin
             ("Interest Expense", "Interest Expense"),
             ("Tax", "Tax Provision"),
             ("Net Income", "Net Income"),
-            ("%Net Income Margin", None), #Calculate Net Income Margin
+            ("Net Income Margin", None), #Calculate Net Income Margin
             
         ]
 
         for item_name, field_name in income_items:
             ws[f'C{row}'] = item_name
 
-            if field_name:
+            if field_name and field_name != "Gross_Profit_Margin" and field_name != "EBIT_Margin" and field_name != "Net Income Margin":
                 # Add quarterly data
                 self._add_quarterly_data(ws, row, self.quarterly_income, field_name, 'E', 'F', 'G', 'H', 'I', 'J')
 
                 # Add annual data
                 self._add_annual_data(ws, row, self.annual_income, field_name, 'K', 'L', 'M', 'N', 'O')
 
-            elif item_name == "Gross Margin":
+            elif item_name == "Gross_Profit_Margin":
                 # Calculate Gross Margin = Gross Profit / Revenue
-                self._calculate_gross_margin(ws, row)
+                self._calculate_gross_profit_margin(ws, row)
+            elif item_name == "EBIT_Margin":
+                # Calculate EBIT Margin = EBIT / Revenue
+                self._calculate_ebit_margin(ws, row)
+            elif item_name == "Net Income Margin":
+                # Calculate Net Income Margin = Net Income / Revenue
+                self._calculate_net_income_margin(ws, row)
 
             row += 1
 
@@ -696,8 +702,8 @@ class TeslaFinancialReportGenerator:
             except Exception as e:
                 logger.warning(f"Error calculating annual debt to equity : {e}")
 
-    def _calculate_gross_margin(self, ws, row):
-        """Calculate Gross Margin = Gross Profit / Revenue"""
+    def _calculate_gross_profit_margin(self, ws, row):
+        """Calculate Gross profit Margin = Gross Profit / Revenue"""
         if self.quarterly_income is not None:
             try:
                 revenue = self.quarterly_income.loc['Total Revenue'].values[:3]
@@ -711,7 +717,7 @@ class TeslaFinancialReportGenerator:
                         ws[f'{col}{row}'].number_format = '0.0%'
 
             except Exception as e:
-                logger.warning(f"Error calculating gross margin: {e}")
+                logger.warning(f"Error calculating gross profit  margin: {e}")
 
         # Annual data
         if self.annual_income is not None:
@@ -727,7 +733,73 @@ class TeslaFinancialReportGenerator:
                         ws[f'{col}{row}'].number_format = '0.0%'
 
             except Exception as e:
-                logger.warning(f"Error calculating annual gross margin: {e}")
+                logger.warning(f"Error calculating annual gross profit margin: {e}")
+
+    def _calculate_ebit_margin(self, ws, row):
+        """Calculate EBIT Margin = EBIT / Revenue"""
+        if self.quarterly_income is not None:
+            try:
+                revenue = self.quarterly_income.loc['Total Revenue'].values[:3]
+                ebit = self.quarterly_income.loc['EBIT'].values[:3]
+
+                for i, (rev, ebit_value) in enumerate(zip(revenue, ebit)):
+                    if rev != 0:
+                        margin = ebit_value / rev
+                        col = ['E', 'G', 'I'][i]
+                        ws[f'{col}{row}'] = margin
+                        ws[f'{col}{row}'].number_format = '0.0%'
+
+            except Exception as e:
+                logger.warning(f"Error calculating EBIT margin: {e}")
+
+        # Annual data
+        if self.annual_income is not None:
+            try:
+                revenue = self.annual_income.loc['Total Revenue'].values[:3]
+                ebit = self.annual_income.loc['EBIT'].values[:3]
+
+                for i, (rev, ebit_value) in enumerate(zip(revenue, ebit)):
+                    if rev != 0:
+                        margin = ebit_value / rev
+                        col = ['K', 'M', 'O'][i]
+                        ws[f'{col}{row}'] = margin
+                        ws[f'{col}{row}'].number_format = '0.0%'
+
+            except Exception as e:
+                logger.warning(f"Error calculating annual EBIT margin: {e}")
+
+    def _calculate_net_income_margin(self, ws, row):
+        """Calculate Net Income Margin = Net Income / Revenue"""
+        if self.quarterly_income is not None:
+            try:
+                revenue = self.quarterly_income.loc['Total Revenue'].values[:3]
+                net_income = self.quarterly_income.loc['Net Income'].values[:3]
+
+                for i, (rev, ni) in enumerate(zip(revenue, net_income)):
+                    if rev != 0:
+                        margin = ni / rev
+                        col = ['E', 'G', 'I'][i]
+                        ws[f'{col}{row}'] = margin
+                        ws[f'{col}{row}'].number_format = '0.0%'
+
+            except Exception as e:
+                logger.warning(f"Error calculating net income margin: {e}")
+
+        # Annual data
+        if self.annual_income is not None:
+            try:
+                revenue = self.annual_income.loc['Total Revenue'].values[:3]
+                net_income = self.annual_income.loc['Net Income'].values[:3]
+
+                for i, (rev, ni) in enumerate(zip(revenue, net_income)):
+                    if rev != 0:
+                        margin = ni / rev
+                        col = ['K', 'M', 'O'][i]
+                        ws[f'{col}{row}'] = margin
+                        ws[f'{col}{row}'].number_format = '0.0%'
+
+            except Exception as e:
+                logger.warning(f"Error calculating annual net income margin: {e}")
 
     def _calculate_net_cash_flow(self, ws, row):
         """Calculate Net Cash Flow = Operating + Investing + Financing Cash Flow"""
